@@ -5,8 +5,31 @@ import '../providers/game_provider.dart';
 import '../utils/formatters.dart';
 import '../widgets/upgrade_card.dart';
 
-class UpgradeScreen extends StatelessWidget {
+class UpgradeScreen extends StatefulWidget {
   const UpgradeScreen({super.key});
+
+  @override
+  State<UpgradeScreen> createState() => _UpgradeScreenState();
+}
+
+class _UpgradeScreenState extends State<UpgradeScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(
+      length: UpgradeCategory.values.length,
+      vsync: this,
+    );
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -14,9 +37,6 @@ class UpgradeScreen extends StatelessWidget {
       builder: (context, gameProvider, child) {
         final player = gameProvider.player;
         if (player == null) return const SizedBox.shrink();
-
-        final career = player.career;
-        final upgrades = getUpgradesForCareer(career);
 
         return Scaffold(
           backgroundColor: const Color(0xFF0E0E12),
@@ -65,15 +85,44 @@ class UpgradeScreen extends StatelessWidget {
                 ),
               ),
             ],
+            bottom: TabBar(
+              controller: _tabController,
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
+              indicatorColor: player.career.color,
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.white.withAlpha(80),
+              dividerColor: Colors.transparent,
+              tabs: UpgradeCategory.values.map((cat) {
+                final unlocked = player.level >= cat.unlockLevel;
+                return Tab(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        unlocked ? cat.icon : Icons.lock,
+                        size: 16,
+                        color: unlocked ? cat.color : Colors.white.withAlpha(40),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        cat.label,
+                        style: TextStyle(
+                          color: unlocked ? null : Colors.white.withAlpha(40),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
           ),
           body: Column(
             children: [
               if (player.hasAutoIncome)
                 Container(
-                  margin:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   decoration: BoxDecoration(
                     color: const Color(0xFF00E676).withAlpha(15),
                     borderRadius: BorderRadius.circular(12),
@@ -104,20 +153,27 @@ class UpgradeScreen extends StatelessWidget {
                   ),
                 ),
               Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.only(top: 8, bottom: 20),
-                  itemCount: upgrades.length,
-                  itemBuilder: (context, index) {
-                    final upgrade = upgrades[index];
-                    final level = player.upgradeLevel(upgrade.type);
-                    return UpgradeCard(
-                      upgrade: upgrade,
-                      currentLevel: level,
-                      canAfford: gameProvider.canBuyUpgrade(upgrade),
-                      accentColor: career.color,
-                      onBuy: () => gameProvider.buyUpgrade(upgrade),
+                child: TabBarView(
+                  controller: _tabController,
+                  children: UpgradeCategory.values.map((cat) {
+                    final upgrades = getUpgradesByCategory(cat);
+                    return ListView.builder(
+                      padding: const EdgeInsets.only(top: 8, bottom: 20),
+                      itemCount: upgrades.length,
+                      itemBuilder: (context, index) {
+                        final upgrade = upgrades[index];
+                        final level = player.getUpgradeLevel(upgrade.id);
+                        return UpgradeCard(
+                          upgrade: upgrade,
+                          currentLevel: level,
+                          canAfford: gameProvider.canBuyUpgrade(upgrade),
+                          locked: gameProvider.isUpgradeLocked(upgrade),
+                          maxed: gameProvider.isUpgradeMaxed(upgrade),
+                          onBuy: () => gameProvider.buyUpgrade(upgrade),
+                        );
+                      },
                     );
-                  },
+                  }).toList(),
                 ),
               ),
             ],

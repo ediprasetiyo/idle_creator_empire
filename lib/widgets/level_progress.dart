@@ -48,7 +48,7 @@ class LevelProgress extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    player.title,
+                    player.rank,
                     style: TextStyle(
                       color: Colors.white.withAlpha(180),
                       fontSize: 13,

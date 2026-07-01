@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/achievement.dart';
 import '../providers/game_provider.dart';
-import '../widgets/stats_bar.dart';
+import '../widgets/achievement_popup.dart';
 import '../widgets/level_progress.dart';
+import '../widgets/level_up_overlay.dart';
+import '../widgets/stats_bar.dart';
 import '../widgets/tap_button.dart';
 import '../utils/formatters.dart';
+import 'achievement_screen.dart';
+import 'mission_screen.dart';
 import 'upgrade_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -16,6 +21,8 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
+  int? _levelUpValue;
+  Achievement? _pendingAchievement;
 
   @override
   void initState() {
@@ -111,6 +118,21 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _checkPendingEvents(GameProvider gameProvider) {
+    if (_levelUpValue != null || _pendingAchievement != null) return;
+
+    final lv = gameProvider.consumeLevelUp();
+    if (lv != null) {
+      setState(() => _levelUpValue = lv);
+      return;
+    }
+
+    final ach = gameProvider.consumeAchievement();
+    if (ach != null) {
+      setState(() => _pendingAchievement = ach);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<GameProvider>(
@@ -120,26 +142,55 @@ class _HomeScreenState extends State<HomeScreen> {
 
         final career = player.career;
 
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _checkPendingEvents(gameProvider);
+        });
+
         final screens = [
           _HomeBody(gameProvider: gameProvider),
           const UpgradeScreen(),
+          const MissionScreen(),
+          const AchievementScreen(),
         ];
-
-        final body = _currentIndex < screens.length
-            ? screens[_currentIndex]
-            : _HomeBody(gameProvider: gameProvider);
 
         return Scaffold(
           backgroundColor: const Color(0xFF0E0E12),
-          body: body,
+          body: Stack(
+            children: [
+              IndexedStack(
+                index: _currentIndex,
+                children: screens,
+              ),
+              if (_levelUpValue != null)
+                Positioned.fill(
+                  child: LevelUpOverlay(
+                    newLevel: _levelUpValue!,
+                    accentColor: career.color,
+                    onDismiss: () {
+                      setState(() => _levelUpValue = null);
+                    },
+                  ),
+                ),
+              if (_pendingAchievement != null)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 100,
+                  child: AchievementPopup(
+                    achievement: _pendingAchievement!,
+                    onDismiss: () {
+                      setState(() => _pendingAchievement = null);
+                    },
+                  ),
+                ),
+            ],
+          ),
           bottomNavigationBar: NavigationBar(
             backgroundColor: const Color(0xFF1A1A24),
             selectedIndex: _currentIndex,
             indicatorColor: career.color.withAlpha(40),
             onDestinationSelected: (index) {
-              if (index <= 1) {
-                setState(() => _currentIndex = index);
-              }
+              setState(() => _currentIndex = index);
             },
             destinations: [
               NavigationDestination(
@@ -149,24 +200,22 @@ class _HomeScreenState extends State<HomeScreen> {
                 label: 'Home',
               ),
               NavigationDestination(
-                icon: Icon(Icons.upgrade_outlined,
+                icon: Icon(Icons.shopping_bag_outlined,
                     color: Colors.white.withAlpha(120)),
-                selectedIcon: Icon(Icons.upgrade, color: career.color),
-                label: 'Upgrades',
+                selectedIcon: Icon(Icons.shopping_bag, color: career.color),
+                label: 'Shop',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.assignment_outlined,
+                    color: Colors.white.withAlpha(120)),
+                selectedIcon: Icon(Icons.assignment, color: career.color),
+                label: 'Missions',
               ),
               NavigationDestination(
                 icon: Icon(Icons.emoji_events_outlined,
-                    color: Colors.white.withAlpha(60)),
-                selectedIcon: Icon(Icons.emoji_events,
-                    color: Colors.white.withAlpha(60)),
+                    color: Colors.white.withAlpha(120)),
+                selectedIcon: Icon(Icons.emoji_events, color: career.color),
                 label: 'Achieve',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.settings_outlined,
-                    color: Colors.white.withAlpha(60)),
-                selectedIcon:
-                    Icon(Icons.settings, color: Colors.white.withAlpha(60)),
-                label: 'Settings',
               ),
             ],
           ),
@@ -205,6 +254,19 @@ class _HomeBody extends StatelessWidget {
               ),
             ),
           ],
+        ),
+        leading: IconButton(
+          icon: Icon(
+            gameProvider.audioService.isMuted
+                ? Icons.volume_off
+                : Icons.volume_up,
+            color: Colors.white.withAlpha(150),
+            size: 22,
+          ),
+          onPressed: () {
+            gameProvider.audioService.toggleMute();
+            (context as Element).markNeedsBuild();
+          },
         ),
         actions: [
           Padding(
