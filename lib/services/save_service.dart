@@ -1,6 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/career.dart';
 import '../models/player.dart';
+import '../models/upgrade.dart';
 import '../utils/constants.dart';
 
 class SaveService {
@@ -37,12 +38,25 @@ class SaveService {
         GameConstants.keyLastSave,
         DateTime.now().millisecondsSinceEpoch,
       ),
+      ...UpgradeType.values.map((type) => _prefs.setInt(
+            '${GameConstants.keyUpgradePrefix}${type.name}',
+            player.upgradeLevel(type),
+          )),
     ]);
   }
 
   Player? loadPlayer() {
     final career = loadCareer();
     if (career == null) return null;
+
+    final upgradeLevels = <UpgradeType, int>{};
+    for (final type in UpgradeType.values) {
+      upgradeLevels[type] = _prefs.getInt(
+            '${GameConstants.keyUpgradePrefix}${type.name}',
+          ) ??
+          0;
+    }
+
     return Player(
       career: career,
       coins: _prefs.getDouble(GameConstants.keyCoins) ?? 0,
@@ -50,6 +64,11 @@ class SaveService {
       followers: _prefs.getDouble(GameConstants.keyFollowers) ?? 0,
       xp: _prefs.getDouble(GameConstants.keyXp) ?? 0,
       level: _prefs.getInt(GameConstants.keyLevel) ?? 1,
+      upgradeLevels: upgradeLevels,
     );
+  }
+
+  int? loadLastSaveTimestamp() {
+    return _prefs.getInt(GameConstants.keyLastSave);
   }
 }

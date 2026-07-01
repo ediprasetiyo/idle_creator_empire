@@ -6,4 +6,8 @@ class GameConstants {
   static const String keyXp = 'xp';
   static const String keyLevel = 'level';
   static const String keyLastSave = 'lastSave';
+  static const String keyUpgradePrefix = 'upgrade_';
+
+  static const int maxOfflineHours = 8;
+  static const int autoIncomeIntervalMs = 1000;
 }

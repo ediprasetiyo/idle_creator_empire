@@ -5,9 +5,111 @@ import '../widgets/stats_bar.dart';
 import '../widgets/level_progress.dart';
 import '../widgets/tap_button.dart';
 import '../utils/formatters.dart';
+import 'upgrade_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _showOfflineEarnings();
+    });
+  }
+
+  void _showOfflineEarnings() {
+    final gameProvider = context.read<GameProvider>();
+    final earnings = gameProvider.offlineEarnings;
+    if (earnings == null || !earnings.hasEarnings) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        final career = gameProvider.player!.career;
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1A1A24),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Column(
+            children: [
+              Icon(Icons.nightlight_round, color: career.color, size: 40),
+              const SizedBox(height: 8),
+              const Text(
+                'Welcome Back!',
+                style: TextStyle(color: Colors.white, fontSize: 20),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'While you were away for ${formatDuration(earnings.duration)}:',
+                style: TextStyle(
+                  color: Colors.white.withAlpha(150),
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (earnings.coins > 0)
+                _OfflineRow(
+                  icon: Icons.monetization_on,
+                  color: const Color(0xFFFFD600),
+                  label: 'Coins',
+                  value: '+${formatNumber(earnings.coins)}',
+                ),
+              if (earnings.views > 0)
+                _OfflineRow(
+                  icon: Icons.visibility,
+                  color: const Color(0xFF2979FF),
+                  label: 'Views',
+                  value: '+${formatNumber(earnings.views)}',
+                ),
+              if (earnings.followers > 0)
+                _OfflineRow(
+                  icon: Icons.people,
+                  color: const Color(0xFFE040FB),
+                  label: 'Followers',
+                  value: '+${formatNumber(earnings.followers)}',
+                ),
+            ],
+          ),
+          actions: [
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                style: FilledButton.styleFrom(
+                  backgroundColor: career.color,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  'Collect',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    ).then((_) {
+      gameProvider.clearOfflineEarnings();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -18,89 +120,27 @@ class HomeScreen extends StatelessWidget {
 
         final career = player.career;
 
+        final screens = [
+          _HomeBody(gameProvider: gameProvider),
+          const UpgradeScreen(),
+        ];
+
+        final body = _currentIndex < screens.length
+            ? screens[_currentIndex]
+            : _HomeBody(gameProvider: gameProvider);
+
         return Scaffold(
           backgroundColor: const Color(0xFF0E0E12),
-          appBar: AppBar(
-            backgroundColor: const Color(0xFF0E0E12),
-            centerTitle: true,
-            title: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(career.icon, color: career.color, size: 22),
-                const SizedBox(width: 8),
-                Text(
-                  '${career.label} Creator',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1A1A24),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.monetization_on,
-                        color: Color(0xFFFFD600),
-                        size: 16,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        formatNumber(player.coins),
-                        style: const TextStyle(
-                          color: Color(0xFFFFD600),
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          body: Column(
-            children: [
-              StatsBar(player: player),
-              LevelProgress(player: player, accentColor: career.color),
-              const Spacer(),
-              TapButton(
-                color: career.color,
-                icon: career.icon,
-                label: 'CREATE\nCONTENT',
-                coinsPerTap: player.coinsPerTap,
-                viewsPerTap: player.viewsPerTap,
-                onTap: () => gameProvider.tap(),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                '+${formatNumber(player.coinsPerTap)} coins  ·  +${formatNumber(player.viewsPerTap)} views per tap',
-                style: TextStyle(
-                  color: Colors.white.withAlpha(80),
-                  fontSize: 12,
-                ),
-              ),
-              const Spacer(),
-            ],
-          ),
+          body: body,
           bottomNavigationBar: NavigationBar(
             backgroundColor: const Color(0xFF1A1A24),
-            selectedIndex: 0,
+            selectedIndex: _currentIndex,
             indicatorColor: career.color.withAlpha(40),
+            onDestinationSelected: (index) {
+              if (index <= 1) {
+                setState(() => _currentIndex = index);
+              }
+            },
             destinations: [
               NavigationDestination(
                 icon: Icon(Icons.home_outlined,
@@ -110,9 +150,8 @@ class HomeScreen extends StatelessWidget {
               ),
               NavigationDestination(
                 icon: Icon(Icons.upgrade_outlined,
-                    color: Colors.white.withAlpha(60)),
-                selectedIcon:
-                    Icon(Icons.upgrade, color: Colors.white.withAlpha(60)),
+                    color: Colors.white.withAlpha(120)),
+                selectedIcon: Icon(Icons.upgrade, color: career.color),
                 label: 'Upgrades',
               ),
               NavigationDestination(
@@ -130,10 +169,169 @@ class HomeScreen extends StatelessWidget {
                 label: 'Settings',
               ),
             ],
-            onDestinationSelected: (_) {},
           ),
         );
       },
+    );
+  }
+}
+
+class _HomeBody extends StatelessWidget {
+  final GameProvider gameProvider;
+
+  const _HomeBody({required this.gameProvider});
+
+  @override
+  Widget build(BuildContext context) {
+    final player = gameProvider.player!;
+    final career = player.career;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF0E0E12),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF0E0E12),
+        centerTitle: true,
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(career.icon, color: career.color, size: 22),
+            const SizedBox(width: 8),
+            Text(
+              '${career.label} Creator',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 4,
+              ),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A1A24),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.monetization_on,
+                    color: Color(0xFFFFD600),
+                    size: 16,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    formatNumber(player.coins),
+                    style: const TextStyle(
+                      color: Color(0xFFFFD600),
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          StatsBar(player: player),
+          LevelProgress(player: player, accentColor: career.color),
+          if (player.hasAutoIncome)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.autorenew,
+                    color: Color(0xFF00E676),
+                    size: 14,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${formatNumber(player.coinsPerSecond)}/s coins  ·  '
+                    '${formatNumber(player.viewsPerSecond)}/s views',
+                    style: const TextStyle(
+                      color: Color(0xFF00E676),
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          const Spacer(),
+          TapButton(
+            color: career.color,
+            icon: career.icon,
+            label: 'CREATE\nCONTENT',
+            coinsPerTap: player.coinsPerTap,
+            viewsPerTap: player.viewsPerTap,
+            onTap: () => gameProvider.tap(),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '+${formatNumber(player.coinsPerTap)} coins  ·  '
+            '+${formatNumber(player.viewsPerTap)} views per tap',
+            style: TextStyle(
+              color: Colors.white.withAlpha(80),
+              fontSize: 12,
+            ),
+          ),
+          const Spacer(),
+        ],
+      ),
+    );
+  }
+}
+
+class _OfflineRow extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String label;
+  final String value;
+
+  const _OfflineRow({
+    required this.icon,
+    required this.color,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withAlpha(150),
+              fontSize: 14,
+            ),
+          ),
+          const Spacer(),
+          Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

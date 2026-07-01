@@ -42,9 +42,8 @@ class _SplashScreenState extends State<SplashScreen>
     await Future.delayed(const Duration(milliseconds: 1800));
     if (!mounted) return;
 
-    final destination = gameProvider.hasPlayer
-        ? const HomeScreen()
-        : const CareerScreen();
+    final destination =
+        gameProvider.hasPlayer ? const HomeScreen() : const CareerScreen();
 
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
