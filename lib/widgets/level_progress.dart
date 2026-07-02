@@ -14,7 +14,9 @@ class LevelProgress extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return Semantics(
+      label: 'Level ${player.level}, ${player.rank}, ${(player.xpProgress * 100).toInt()} percent to next level',
+      child: Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -77,6 +79,7 @@ class LevelProgress extends StatelessWidget {
           ),
         ],
       ),
+    ),
     );
   }
 }

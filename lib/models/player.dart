@@ -39,6 +39,9 @@ class Player {
   double highestCoinPerSecond;
   int totalWheelSpins;
   int lastWheelSpin;
+  bool removeAds;
+  bool isVip;
+  int totalIapPurchases;
 
   Player({
     required this.career,
@@ -70,6 +73,9 @@ class Player {
     this.highestCoinPerSecond = 0,
     this.totalWheelSpins = 0,
     this.lastWheelSpin = 0,
+    this.removeAds = false,
+    this.isVip = false,
+    this.totalIapPurchases = 0,
   })  : upgradeLevels = upgradeLevels ?? {},
         completedAchievements = completedAchievements ?? {},
         missionProgress = missionProgress ?? List.filled(5, 0),
@@ -100,11 +106,17 @@ class Player {
     return 1.0 + lv * 0.2;
   }
 
+  double get vipMultiplier => isVip ? 2.0 : 1.0;
+
   double get incomeBoostMultiplier {
     final now = DateTime.now().millisecondsSinceEpoch;
-    if ((boostEndTimes['boost_5x'] ?? 0) > now) return 5.0;
-    if ((boostEndTimes['boost_2x'] ?? 0) > now) return 2.0;
-    return 1.0;
+    double boost = 1.0;
+    if ((boostEndTimes['boost_5x'] ?? 0) > now) {
+      boost = 5.0;
+    } else if ((boostEndTimes['boost_2x'] ?? 0) > now) {
+      boost = 2.0;
+    }
+    return boost * vipMultiplier;
   }
 
   double get xpBoostMultiplier {

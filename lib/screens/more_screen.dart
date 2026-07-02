@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../providers/game_provider.dart';
 import '../utils/formatters.dart';
 import 'daily_reward_screen.dart';
+import 'iap_shop_screen.dart';
+import 'leaderboard_screen.dart';
 import 'prestige_screen.dart';
 import 'settings_screen.dart';
 import 'statistics_screen.dart';
@@ -18,7 +20,6 @@ class MoreScreen extends StatelessWidget {
         final player = gp.player;
         if (player == null) return const SizedBox.shrink();
 
-        final career = player.career;
         final hasDailyReward = gp.hasDailyRewardAvailable;
         final canSpin = player.canSpinWheel;
         final cooldownMs = player.wheelCooldownRemaining;
@@ -62,6 +63,22 @@ class MoreScreen extends StatelessWidget {
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WheelScreen())),
               ),
               _MenuTile(
+                icon: Icons.leaderboard,
+                color: const Color(0xFFFFD600),
+                label: 'Leaderboard',
+                subtitle: 'See top creators worldwide',
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LeaderboardScreen())),
+              ),
+              _MenuTile(
+                icon: Icons.shopping_cart,
+                color: const Color(0xFF00E676),
+                label: 'Premium Shop',
+                subtitle: player.isVip ? 'VIP Active' : 'Boosts, coins & more',
+                badge: player.isVip ? 'VIP' : null,
+                badgeColor: const Color(0xFFE040FB),
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const IapShopScreen())),
+              ),
+              _MenuTile(
                 icon: Icons.bar_chart,
                 color: const Color(0xFF2979FF),
                 label: 'Statistics',
@@ -72,7 +89,7 @@ class MoreScreen extends StatelessWidget {
                 icon: Icons.settings,
                 color: Colors.white.withAlpha(180),
                 label: 'Settings',
-                subtitle: 'Audio, save, about',
+                subtitle: 'Audio, save, cloud sync',
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
               ),
               const SizedBox(height: 24),
@@ -117,49 +134,53 @@ class _MenuTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A24),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: ListTile(
-        leading: Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: color.withAlpha(20),
-            borderRadius: BorderRadius.circular(12),
+    return Semantics(
+      button: true,
+      label: '$label: $subtitle',
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1A24),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: ListTile(
+          leading: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: color.withAlpha(20),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: color, size: 24),
           ),
-          child: Icon(icon, color: color, size: 24),
-        ),
-        title: Row(
-          children: [
-            Text(label, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
-            if (badge != null) ...[
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: badgeColor ?? Colors.redAccent,
-                  borderRadius: BorderRadius.circular(8),
+          title: Row(
+            children: [
+              Text(label, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+              if (badge != null) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: badgeColor ?? Colors.redAccent,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    badge!,
+                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                  ),
                 ),
-                child: Text(
-                  badge!,
-                  style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                ),
-              ),
+              ],
             ],
-          ],
+          ),
+          subtitle: Text(
+            subtitle,
+            style: TextStyle(color: Colors.white.withAlpha(100), fontSize: 12),
+          ),
+          trailing: Icon(Icons.chevron_right, color: Colors.white.withAlpha(60), size: 20),
+          onTap: onTap,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         ),
-        subtitle: Text(
-          subtitle,
-          style: TextStyle(color: Colors.white.withAlpha(100), fontSize: 12),
-        ),
-        trailing: Icon(Icons.chevron_right, color: Colors.white.withAlpha(60), size: 20),
-        onTap: onTap,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       ),
     );
   }
@@ -180,20 +201,24 @@ class _AdTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A24),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withAlpha(30)),
-      ),
-      child: ListTile(
-        leading: Icon(Icons.play_circle_outline, color: color, size: 28),
-        title: Text(label, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.bold)),
-        trailing: Icon(icon, color: color, size: 20),
-        onTap: onTap,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+    return Semantics(
+      button: true,
+      label: label,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1A24),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withAlpha(30)),
+        ),
+        child: ListTile(
+          leading: Icon(Icons.play_circle_outline, color: color, size: 28),
+          title: Text(label, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.bold)),
+          trailing: Icon(icon, color: color, size: 20),
+          onTap: onTap,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+        ),
       ),
     );
   }

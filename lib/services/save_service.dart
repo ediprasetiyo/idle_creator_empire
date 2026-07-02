@@ -56,6 +56,9 @@ class SaveService {
       _prefs.setDouble(GameConstants.keyHighestCps, player.highestCoinPerSecond),
       _prefs.setInt(GameConstants.keyTotalWheelSpins, player.totalWheelSpins),
       _prefs.setInt(GameConstants.keyLastWheelSpin, player.lastWheelSpin),
+      _prefs.setBool(GameConstants.keyRemoveAds, player.removeAds),
+      _prefs.setBool(GameConstants.keyIsVip, player.isVip),
+      _prefs.setInt(GameConstants.keyTotalIapPurchases, player.totalIapPurchases),
     ];
 
     for (final u in allUpgrades) {
@@ -154,6 +157,9 @@ class SaveService {
       highestCoinPerSecond: _prefs.getDouble(GameConstants.keyHighestCps) ?? 0,
       totalWheelSpins: _prefs.getInt(GameConstants.keyTotalWheelSpins) ?? 0,
       lastWheelSpin: _prefs.getInt(GameConstants.keyLastWheelSpin) ?? 0,
+      removeAds: _prefs.getBool(GameConstants.keyRemoveAds) ?? false,
+      isVip: _prefs.getBool(GameConstants.keyIsVip) ?? false,
+      totalIapPurchases: _prefs.getInt(GameConstants.keyTotalIapPurchases) ?? 0,
     );
   }
 

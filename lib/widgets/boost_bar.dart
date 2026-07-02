@@ -38,7 +38,9 @@ class _BoostChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return Semantics(
+      label: '${boost.name} boost active, ${formatCountdown(remainingMs)} remaining',
+      child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: boost.color.withAlpha(25),
@@ -68,6 +70,7 @@ class _BoostChip extends StatelessWidget {
           ),
         ],
       ),
+    ),
     );
   }
 }

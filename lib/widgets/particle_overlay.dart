@@ -50,18 +50,20 @@ class _ParticleOverlayState extends State<ParticleOverlay>
   @override
   Widget build(BuildContext context) {
     return IgnorePointer(
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) {
-          return CustomPaint(
-            size: Size.infinite,
-            painter: _ParticlePainter(
-              particles: _particles,
-              color: widget.color,
-              progress: _controller.value,
-            ),
-          );
-        },
+      child: RepaintBoundary(
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, child) {
+            return CustomPaint(
+              size: Size.infinite,
+              painter: _ParticlePainter(
+                particles: _particles,
+                color: widget.color,
+                progress: _controller.value,
+              ),
+            );
+          },
+        ),
       ),
     );
   }

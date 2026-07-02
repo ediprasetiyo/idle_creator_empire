@@ -208,13 +208,17 @@ class _HomeScreenState extends State<HomeScreen> {
           backgroundColor: const Color(0xFF0E0E12),
           body: Stack(
             children: [
-              IndexedStack(
-                index: _currentIndex,
-                children: screens,
+              RepaintBoundary(
+                child: IndexedStack(
+                  index: _currentIndex,
+                  children: screens,
+                ),
               ),
               if (_currentIndex == 0)
                 Positioned.fill(
-                  child: ParticleOverlay(color: career.color),
+                  child: RepaintBoundary(
+                    child: ParticleOverlay(color: career.color),
+                  ),
                 ),
               if (_levelUpValue != null)
                 Positioned.fill(
@@ -309,64 +313,74 @@ class _HomeBody extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: const Color(0xFF0E0E12),
         centerTitle: true,
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(career.icon, color: career.color, size: 22),
-            const SizedBox(width: 8),
-            Text(
-              '${career.label} Creator',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+        title: Semantics(
+          header: true,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(career.icon, color: career.color, size: 22),
+              const SizedBox(width: 8),
+              Text(
+                '${career.label} Creator',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-          ],
-        ),
-        leading: IconButton(
-          icon: Icon(
-            gameProvider.audioService.isSoundMuted
-                ? Icons.volume_off
-                : Icons.volume_up,
-            color: Colors.white.withAlpha(150),
-            size: 22,
+            ],
           ),
-          onPressed: () {
-            gameProvider.audioService.toggleSound();
-            (context as Element).markNeedsBuild();
-          },
+        ),
+        leading: Semantics(
+          label: gameProvider.audioService.isSoundMuted ? 'Unmute sound' : 'Mute sound',
+          button: true,
+          child: IconButton(
+            icon: Icon(
+              gameProvider.audioService.isSoundMuted
+                  ? Icons.volume_off
+                  : Icons.volume_up,
+              color: Colors.white.withAlpha(150),
+              size: 22,
+            ),
+            onPressed: () {
+              gameProvider.audioService.toggleSound();
+              (context as Element).markNeedsBuild();
+            },
+          ),
         ),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 4,
-              ),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A1A24),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.monetization_on,
-                    color: Color(0xFFFFD600),
-                    size: 16,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    formatNumber(player.coins),
-                    style: const TextStyle(
+            child: Semantics(
+              label: 'Coins: ${formatNumber(player.coins)}',
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A1A24),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.monetization_on,
                       color: Color(0xFFFFD600),
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
+                      size: 16,
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 4),
+                    Text(
+                      formatNumber(player.coins),
+                      style: const TextStyle(
+                        color: Color(0xFFFFD600),
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -374,63 +388,75 @@ class _HomeBody extends StatelessWidget {
       ),
       body: Column(
         children: [
-          StatsBar(player: player),
-          LevelProgress(player: player, accentColor: career.color),
-          BoostBar(player: player),
+          RepaintBoundary(child: StatsBar(player: player)),
+          RepaintBoundary(child: LevelProgress(player: player, accentColor: career.color)),
+          RepaintBoundary(child: BoostBar(player: player)),
           if (player.hasAutoIncome)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.autorenew,
-                    color: Color(0xFF00E676),
-                    size: 14,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${formatNumber(player.coinsPerSecond)}/s coins  ·  '
-                    '${formatNumber(player.viewsPerSecond)}/s views',
-                    style: const TextStyle(
+            Semantics(
+              label: '${formatNumber(player.coinsPerSecond)} coins per second, '
+                  '${formatNumber(player.viewsPerSecond)} views per second',
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.autorenew,
                       color: Color(0xFF00E676),
-                      fontSize: 11,
+                      size: 14,
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 4),
+                    Text(
+                      '${formatNumber(player.coinsPerSecond)}/s coins  ·  '
+                      '${formatNumber(player.viewsPerSecond)}/s views',
+                      style: const TextStyle(
+                        color: Color(0xFF00E676),
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           if (player.prestigeCount > 0)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.diamond, color: Color(0xFFE040FB), size: 12),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${player.prestigeMultiplier.toStringAsFixed(1)}x prestige bonus',
-                    style: const TextStyle(color: Color(0xFFE040FB), fontSize: 11),
-                  ),
-                ],
+            Semantics(
+              label: '${player.prestigeMultiplier.toStringAsFixed(1)} times prestige bonus',
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.diamond, color: Color(0xFFE040FB), size: 12),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${player.prestigeMultiplier.toStringAsFixed(1)}x prestige bonus',
+                      style: const TextStyle(color: Color(0xFFE040FB), fontSize: 11),
+                    ),
+                  ],
+                ),
               ),
             ),
           const Spacer(),
-          TapButton(
-            color: career.color,
-            icon: career.icon,
-            label: 'CREATE\nCONTENT',
-            coinsPerTap: player.coinsPerTap,
-            viewsPerTap: player.viewsPerTap,
-            onTap: () => gameProvider.tap(),
+          RepaintBoundary(
+            child: TapButton(
+              color: career.color,
+              icon: career.icon,
+              label: 'CREATE\nCONTENT',
+              coinsPerTap: player.coinsPerTap,
+              viewsPerTap: player.viewsPerTap,
+              onTap: () => gameProvider.tap(),
+            ),
           ),
           const SizedBox(height: 12),
-          Text(
-            '+${formatNumber(player.coinsPerTap)} coins  ·  '
-            '+${formatNumber(player.viewsPerTap)} views per tap',
-            style: TextStyle(
-              color: Colors.white.withAlpha(80),
-              fontSize: 12,
+          Semantics(
+            label: '${formatNumber(player.coinsPerTap)} coins and ${formatNumber(player.viewsPerTap)} views per tap',
+            child: Text(
+              '+${formatNumber(player.coinsPerTap)} coins  ·  '
+              '+${formatNumber(player.viewsPerTap)} views per tap',
+              style: TextStyle(
+                color: Colors.white.withAlpha(80),
+                fontSize: 12,
+              ),
             ),
           ),
           const Spacer(),

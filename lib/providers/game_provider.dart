@@ -1,18 +1,28 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import '../config/iap_config.dart';
 import '../models/achievement.dart';
 import '../models/boost.dart';
 import '../models/career.dart';
 import '../models/daily_reward.dart';
+import '../models/iap_product.dart';
 import '../models/mission.dart';
 import '../models/player.dart';
 import '../models/prestige.dart';
 import '../models/upgrade.dart';
 import '../models/wheel_reward.dart';
+import '../services/achievement_sync_service.dart';
 import '../services/ad_service.dart';
+import '../services/analytics_service.dart';
 import '../services/audio_service.dart';
+import '../services/cloud_save_service.dart';
+import '../services/crash_service.dart';
+import '../services/iap_service.dart';
+import '../services/leaderboard_service.dart';
 import '../services/notification_service.dart';
+import '../services/performance_service.dart';
+import '../services/remote_config_service.dart';
 import '../services/save_service.dart';
 import '../utils/constants.dart';
 
@@ -37,6 +47,15 @@ class GameProvider extends ChangeNotifier {
   final AudioService audioService = AudioService();
   final AdService adService = AdService();
   final NotificationService notificationService = NotificationService();
+  final AnalyticsService analyticsService = AnalyticsService();
+  final CrashService crashService = CrashService();
+  final RemoteConfigService remoteConfigService = RemoteConfigService();
+  final PerformanceService performanceService = PerformanceService();
+  final CloudSaveService cloudSaveService = CloudSaveService();
+  final LeaderboardService leaderboardService = LeaderboardService();
+  final AchievementSyncService achievementSyncService = AchievementSyncService();
+  final IapService iapService = IapService();
+
   Player? _player;
   bool _isLoaded = false;
   OfflineEarnings? _offlineEarnings;
@@ -67,6 +86,7 @@ class GameProvider extends ChangeNotifier {
 
   void toggleHaptic() {
     _hapticEnabled = !_hapticEnabled;
+    analyticsService.logSettingsChanged('haptic', _hapticEnabled.toString());
     notifyListeners();
   }
 
@@ -84,6 +104,8 @@ class GameProvider extends ChangeNotifier {
   bool get hasPendingAchievement => _pendingAchievements.isNotEmpty;
 
   Future<void> load() async {
+    final trace = performanceService.startTrace('app_load');
+
     await _saveService.init();
     _player = _saveService.loadPlayer();
     if (_player != null) {
@@ -91,11 +113,85 @@ class GameProvider extends ChangeNotifier {
       _ensureMissions();
       _startAutoIncome();
       _startOnlineTimer();
+      crashService.setCustomKey('career', _player!.career.name);
+      crashService.setCustomKey('level', _player!.level.toString());
     }
-    adService.initialize();
-    notificationService.initialize();
+
+    await Future.wait([
+      adService.initialize(),
+      notificationService.initialize(),
+      analyticsService.initialize(),
+      crashService.initialize(),
+      remoteConfigService.initialize(),
+      performanceService.initialize(),
+      cloudSaveService.initialize(),
+      leaderboardService.initialize(),
+      achievementSyncService.initialize(),
+      iapService.initialize(),
+    ]);
+
+    _setupIapListener();
+
+    if (_player != null) {
+      adService.setAdsRemoved(_player!.removeAds || _player!.isVip);
+      achievementSyncService.syncAll(_player!.completedAchievements);
+    }
+
+    analyticsService.logSessionStart();
+    trace.stop();
     _isLoaded = true;
     notifyListeners();
+  }
+
+  void _setupIapListener() {
+    iapService.onPurchaseComplete = (result) {
+      if (!result.success || _player == null) return;
+      _deliverIapProduct(result.productId);
+    };
+  }
+
+  void _deliverIapProduct(String productId) {
+    if (_player == null) return;
+    final p = _player!;
+    final product = getIapProductById(productId);
+    if (product == null) return;
+
+    if (product.grantsRemoveAds) {
+      p.removeAds = true;
+      adService.setAdsRemoved(true);
+    }
+    if (product.grantsVip) {
+      p.isVip = true;
+      adService.setAdsRemoved(true);
+    }
+    if (product.coinsReward > 0) {
+      p.coins += product.coinsReward;
+      p.totalCoinsEarned += product.coinsReward;
+    }
+    if (product.prestigePointsReward > 0) {
+      p.prestigePoints += product.prestigePointsReward;
+      p.totalPrestigePoints += product.prestigePointsReward;
+    }
+    if (productId == IapConfig.starterPack) {
+      activateBoost('boost_2x', 900);
+    }
+
+    p.totalIapPurchases++;
+    analyticsService.logIapPurchased(productId);
+    _saveService.savePlayer(p);
+    notifyListeners();
+  }
+
+  Future<bool> purchaseProduct(String productId) async {
+    return iapService.purchase(productId);
+  }
+
+  Future<bool> restorePurchases() async {
+    final result = await iapService.restorePurchases();
+    if (result) {
+      analyticsService.logIapRestored();
+    }
+    return result;
   }
 
   void clearOfflineEarnings() {
@@ -141,6 +237,8 @@ class GameProvider extends ChangeNotifier {
     await _saveService.savePlayer(_player!);
     _startAutoIncome();
     _startOnlineTimer();
+    analyticsService.logCareerSelected(career.name);
+    crashService.setCustomKey('career', career.name);
     notifyListeners();
   }
 
@@ -167,6 +265,8 @@ class GameProvider extends ChangeNotifier {
     if (p.level > prevLevel) {
       _pendingLevelUp = p.level;
       audioService.playLevelUp();
+      analyticsService.logLevelUp(p.level);
+      crashService.setCustomKey('level', p.level.toString());
     } else {
       audioService.playTap();
     }
@@ -182,8 +282,6 @@ class GameProvider extends ChangeNotifier {
     _batchSave(5);
     notifyListeners();
   }
-
-  // ═══════════════ Upgrades ═══════════════
 
   bool canBuyUpgrade(UpgradeDef upgrade) {
     if (_player == null) return false;
@@ -218,11 +316,10 @@ class GameProvider extends ChangeNotifier {
     _trackHighestCps();
     _checkAchievements();
     audioService.playBuy();
+    analyticsService.logUpgradePurchased(upgrade.id, lv + 1, cost);
     _saveService.savePlayer(p);
     notifyListeners();
   }
-
-  // ═══════════════ Missions ═══════════════
 
   void claimMission(int index) {
     if (_player == null) return;
@@ -240,6 +337,7 @@ class GameProvider extends ChangeNotifier {
 
     _levelUpCheck(p);
     audioService.playReward();
+    analyticsService.logMissionCompleted(index);
     _checkAchievements();
     _saveService.savePlayer(p);
     notifyListeners();
@@ -261,8 +359,6 @@ class GameProvider extends ChangeNotifier {
     if (target <= 0) return 1;
     return (_player!.missionProgress[index] / target).clamp(0.0, 1.0);
   }
-
-  // ═══════════════ Prestige ═══════════════
 
   void prestige() {
     if (_player == null) return;
@@ -299,6 +395,7 @@ class GameProvider extends ChangeNotifier {
 
     _ensureMissions();
     audioService.playPrestige();
+    analyticsService.logPrestigeCompleted(p.prestigeCount, points);
     _saveService.savePlayer(p);
     _prestigePending = true;
     notifyListeners();
@@ -326,8 +423,6 @@ class GameProvider extends ChangeNotifier {
     _saveService.savePlayer(p);
     notifyListeners();
   }
-
-  // ═══════════════ Daily Login ═══════════════
 
   bool get hasDailyRewardAvailable {
     if (_player == null) return false;
@@ -366,12 +461,11 @@ class GameProvider extends ChangeNotifier {
 
     _levelUpCheck(p);
     audioService.playReward();
+    analyticsService.logDailyRewardClaimed(p.dailyLoginStreak, p.dailyLoginStreak);
     _checkAchievements();
     _saveService.savePlayer(p);
     notifyListeners();
   }
-
-  // ═══════════════ Boosts ═══════════════
 
   void activateBoost(String boostId, int durationSeconds) {
     if (_player == null) return;
@@ -380,6 +474,7 @@ class GameProvider extends ChangeNotifier {
     final newEnd = (currentEnd > now ? currentEnd : now) + (durationSeconds * 1000);
     _player!.boostEndTimes[boostId] = newEnd;
     audioService.playBoost();
+    analyticsService.logBoostActivated(boostId);
     _saveService.savePlayer(_player!);
     notifyListeners();
   }
@@ -388,8 +483,6 @@ class GameProvider extends ChangeNotifier {
     if (_player == null) return false;
     return (_player!.boostEndTimes[boostId] ?? 0) > DateTime.now().millisecondsSinceEpoch;
   }
-
-  // ═══════════════ Lucky Wheel ═══════════════
 
   int determineWheelResult() {
     final segments = allWheelSegments;
@@ -431,6 +524,7 @@ class GameProvider extends ChangeNotifier {
     p.lastWheelSpin = DateTime.now().millisecondsSinceEpoch;
 
     audioService.playWheelResult();
+    analyticsService.logWheelSpun(segment.label);
     _checkAchievements();
     _saveService.savePlayer(p);
     notifyListeners();
@@ -442,12 +536,13 @@ class GameProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ═══════════════ Ads ═══════════════
-
   void watchAdForBoost() {
     adService.showRewardedAd(
       rewardType: 'boost_2x',
-      onRewarded: () => activateBoost('boost_2x', 900),
+      onRewarded: () {
+        activateBoost('boost_2x', 900);
+        analyticsService.logAdWatched('rewarded', 'boost_2x');
+      },
     );
   }
 
@@ -460,6 +555,7 @@ class GameProvider extends ChangeNotifier {
         final reward = bonus > 100 ? bonus : 100;
         _player!.coins += reward;
         _player!.totalCoinsEarned += reward;
+        analyticsService.logAdWatched('rewarded', 'coins');
         _saveService.savePlayer(_player!);
         notifyListeners();
       },
@@ -469,11 +565,43 @@ class GameProvider extends ChangeNotifier {
   void watchAdForWheelSpin() {
     adService.showRewardedAd(
       rewardType: 'wheel_spin',
-      onRewarded: () => grantFreeWheelSpin(),
+      onRewarded: () {
+        grantFreeWheelSpin();
+        analyticsService.logAdWatched('rewarded', 'wheel_spin');
+      },
     );
   }
 
-  // ═══════════════ Settings ═══════════════
+  Future<CloudSaveResult> syncToCloud() async {
+    if (_player == null) {
+      return const CloudSaveResult(status: CloudSaveStatus.error, error: 'No player');
+    }
+    final saveData = _saveService.exportSave();
+    final localTimestamp = DateTime.now().millisecondsSinceEpoch;
+    final result = await cloudSaveService.syncSave(
+      localSaveData: saveData,
+      localTimestamp: localTimestamp,
+    );
+    if (result.status == CloudSaveStatus.success) {
+      analyticsService.logCloudSaveSynced();
+    }
+    notifyListeners();
+    return result;
+  }
+
+  Future<bool> loadFromCloud(String cloudData) async {
+    final success = await _saveService.importSave(cloudData);
+    if (success) {
+      _player = _saveService.loadPlayer();
+      if (_player != null) {
+        _ensureMissions();
+        _startAutoIncome();
+        _startOnlineTimer();
+      }
+      notifyListeners();
+    }
+    return success;
+  }
 
   Future<void> resetGame() async {
     _autoIncomeTimer?.cancel();
@@ -483,6 +611,7 @@ class GameProvider extends ChangeNotifier {
     _pendingAchievements.clear();
     _pendingLevelUp = null;
     _offlineEarnings = null;
+    analyticsService.logGameReset();
     await _saveService.clearAll();
     notifyListeners();
   }
@@ -503,8 +632,6 @@ class GameProvider extends ChangeNotifier {
     return success;
   }
 
-  // ═══════════════ Internal ═══════════════
-
   void _levelUpCheck(Player p) {
     final prevLevel = p.level;
     while (p.xp >= p.xpToNextLevel) {
@@ -514,6 +641,7 @@ class GameProvider extends ChangeNotifier {
     if (p.level > prevLevel) {
       _pendingLevelUp = p.level;
       audioService.playLevelUp();
+      analyticsService.logLevelUp(p.level);
     }
   }
 
@@ -601,6 +729,8 @@ class GameProvider extends ChangeNotifier {
         p.xp += a.xpReward;
         p.totalCoinsEarned += a.coinReward;
         _pendingAchievements.add(a);
+        analyticsService.logAchievementUnlocked(a.id);
+        achievementSyncService.syncAchievement(a.id);
       }
     }
   }
@@ -701,6 +831,7 @@ class GameProvider extends ChangeNotifier {
     audioService.dispose();
     adService.dispose();
     notificationService.dispose();
+    iapService.dispose();
     super.dispose();
   }
 }

@@ -104,7 +104,10 @@ class _TapButtonState extends State<TapButton>
                 child: child,
               );
             },
-            child: GestureDetector(
+            child: Semantics(
+              button: true,
+              label: 'Create content. Earns ${formatNumber(widget.coinsPerTap)} coins and ${formatNumber(widget.viewsPerTap)} views',
+              child: GestureDetector(
               onTap: _handleTap,
               child: Container(
                 width: 180,
@@ -144,6 +147,7 @@ class _TapButtonState extends State<TapButton>
                 ),
               ),
             ),
+          ),
           ),
         ],
       ),

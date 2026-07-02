@@ -81,7 +81,8 @@ class _WheelWidgetState extends State<WheelWidget>
       child: Stack(
         alignment: Alignment.center,
         children: [
-          AnimatedBuilder(
+          RepaintBoundary(
+          child: AnimatedBuilder(
             animation: _rotationAnimation,
             builder: (context, child) {
               return Transform.rotate(
@@ -93,6 +94,7 @@ class _WheelWidgetState extends State<WheelWidget>
               size: const Size(280, 280),
               painter: _WheelPainter(segments: segments),
             ),
+          ),
           ),
           Positioned(
             top: 0,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/game_provider.dart';
+import '../utils/constants.dart';
 import 'career_screen.dart';
 import 'home_screen.dart';
 
@@ -16,6 +17,8 @@ class _SplashScreenState extends State<SplashScreen>
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
+  late Animation<double> _shimmerAnimation;
+  String _loadingText = 'Loading...';
 
   @override
   void initState() {
@@ -30,6 +33,9 @@ class _SplashScreenState extends State<SplashScreen>
     _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
     );
+    _shimmerAnimation = Tween<double>(begin: -1.0, end: 2.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
 
     _controller.forward();
     _loadAndNavigate();
@@ -37,8 +43,11 @@ class _SplashScreenState extends State<SplashScreen>
 
   Future<void> _loadAndNavigate() async {
     final gameProvider = context.read<GameProvider>();
+
+    setState(() => _loadingText = 'Initializing...');
     await gameProvider.load();
 
+    setState(() => _loadingText = 'Preparing your empire...');
     await Future.delayed(const Duration(milliseconds: 1800));
     if (!mounted) return;
 
@@ -82,55 +91,85 @@ class _SplashScreenState extends State<SplashScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 100,
-                height: 100,
+                width: 110,
+                height: 110,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                     colors: [Color(0xFF7C4DFF), Color(0xFFE040FB)],
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF7C4DFF).withAlpha(80),
-                      blurRadius: 30,
-                      spreadRadius: 5,
+                      color: const Color(0xFF7C4DFF).withAlpha(100),
+                      blurRadius: 40,
+                      spreadRadius: 8,
+                    ),
+                    BoxShadow(
+                      color: const Color(0xFFE040FB).withAlpha(60),
+                      blurRadius: 60,
+                      spreadRadius: 4,
                     ),
                   ],
                 ),
                 child: const Icon(
                   Icons.play_circle_fill,
-                  size: 50,
+                  size: 55,
                   color: Colors.white,
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 28),
               const Text(
                 'Idle Creator',
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 28,
+                  fontSize: 30,
                   fontWeight: FontWeight.bold,
-                  letterSpacing: 1,
+                  letterSpacing: 1.5,
                 ),
               ),
-              const Text(
-                'Empire',
+              ShaderMask(
+                shaderCallback: (bounds) {
+                  return const LinearGradient(
+                    colors: [Color(0xFF7C4DFF), Color(0xFFE040FB), Color(0xFF7C4DFF)],
+                  ).createShader(bounds);
+                },
+                child: const Text(
+                  'Empire',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 30,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'v${GameConstants.appVersion}',
                 style: TextStyle(
-                  color: Color(0xFF7C4DFF),
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1,
+                  color: Colors.white.withAlpha(60),
+                  fontSize: 12,
                 ),
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 48),
               SizedBox(
-                width: 24,
-                height: 24,
+                width: 28,
+                height: 28,
                 child: CircularProgressIndicator(
-                  strokeWidth: 2,
+                  strokeWidth: 2.5,
                   valueColor: AlwaysStoppedAnimation<Color>(
                     Colors.white.withAlpha(120),
                   ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                _loadingText,
+                style: TextStyle(
+                  color: Colors.white.withAlpha(80),
+                  fontSize: 12,
                 ),
               ),
             ],

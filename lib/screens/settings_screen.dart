@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/game_provider.dart';
+import '../services/cloud_save_service.dart';
 import '../utils/constants.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -11,6 +12,9 @@ class SettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<GameProvider>(
       builder: (context, gp, _) {
+        final cloudStatus = gp.cloudSaveService.status;
+        final isSyncing = cloudStatus == CloudSaveStatus.syncing;
+
         return Scaffold(
           backgroundColor: const Color(0xFF0E0E12),
           appBar: AppBar(
@@ -50,6 +54,32 @@ class SettingsScreen extends StatelessWidget {
                 onChanged: (_) => gp.toggleHaptic(),
               ),
               const SizedBox(height: 20),
+              _SectionLabel(label: 'Cloud Save'),
+              _ActionTile(
+                icon: Icons.cloud_sync,
+                label: 'Sync to Cloud',
+                subtitle: isSyncing
+                    ? 'Syncing...'
+                    : gp.cloudSaveService.hasSynced
+                        ? 'Last sync: ${_formatSyncTime(gp.cloudSaveService.lastSyncTimestamp)}'
+                        : 'Backup your progress to the cloud',
+                onTap: isSyncing ? null : () => _syncToCloud(context, gp),
+              ),
+              _ActionTile(
+                icon: Icons.cloud_download,
+                label: 'Load from Cloud',
+                subtitle: 'Restore progress from cloud backup',
+                onTap: isSyncing ? null : () => _loadFromCloud(context, gp),
+              ),
+              const SizedBox(height: 20),
+              _SectionLabel(label: 'Purchases'),
+              _ActionTile(
+                icon: Icons.restore,
+                label: 'Restore Purchases',
+                subtitle: 'Restore previously bought items',
+                onTap: () => _restorePurchases(context, gp),
+              ),
+              const SizedBox(height: 20),
               _SectionLabel(label: 'Save Data'),
               _ActionTile(
                 icon: Icons.upload,
@@ -87,7 +117,7 @@ class SettingsScreen extends StatelessWidget {
               _ActionTile(
                 icon: Icons.privacy_tip_outlined,
                 label: 'Privacy Policy',
-                subtitle: 'No data collected. Everything is local.',
+                subtitle: 'View privacy information',
                 onTap: () => _showPrivacy(context),
               ),
             ],
@@ -95,6 +125,112 @@ class SettingsScreen extends StatelessWidget {
         );
       },
     );
+  }
+
+  String _formatSyncTime(int timestampMs) {
+    final dt = DateTime.fromMillisecondsSinceEpoch(timestampMs);
+    final now = DateTime.now();
+    final diff = now.difference(dt);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${dt.month}/${dt.day} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
+  }
+
+  void _syncToCloud(BuildContext context, GameProvider gp) async {
+    final result = await gp.syncToCloud();
+    if (!context.mounted) return;
+
+    String message;
+    Color color;
+    switch (result.status) {
+      case CloudSaveStatus.success:
+        message = 'Save synced to cloud!';
+        color = const Color(0xFF00E676);
+      case CloudSaveStatus.conflict:
+        message = 'Conflict detected. Local save was kept.';
+        color = const Color(0xFFFF9100);
+      case CloudSaveStatus.error:
+        message = result.error ?? 'Sync failed';
+        color = Colors.redAccent;
+      default:
+        message = 'Sync complete';
+        color = const Color(0xFF00E676);
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: color),
+    );
+  }
+
+  void _loadFromCloud(BuildContext context, GameProvider gp) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.cloud_download, color: Color(0xFF2979FF), size: 24),
+            SizedBox(width: 8),
+            Text('Load from Cloud', style: TextStyle(color: Colors.white, fontSize: 18)),
+          ],
+        ),
+        content: Text(
+          'This will replace your current local save with the cloud save. '
+          'Any local progress not synced will be lost.\n\nContinue?',
+          style: TextStyle(color: Colors.white.withAlpha(180), fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('Cancel', style: TextStyle(color: Colors.white.withAlpha(150))),
+          ),
+          FilledButton(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              final cloudResult = await gp.cloudSaveService.downloadSave();
+              if (!context.mounted) return;
+              if (cloudResult.cloudData != null && cloudResult.cloudData!.containsKey('data')) {
+                final success = await gp.loadFromCloud(cloudResult.cloudData!['data'] as String);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(success ? 'Cloud save loaded!' : 'Failed to load cloud save.'),
+                      backgroundColor: success ? const Color(0xFF00E676) : Colors.redAccent,
+                    ),
+                  );
+                }
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('No cloud save found.'),
+                    backgroundColor: Color(0xFFFF9100),
+                  ),
+                );
+              }
+            },
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF2979FF),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('Load', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _restorePurchases(BuildContext context, GameProvider gp) async {
+    final success = await gp.restorePurchases();
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(success ? 'Purchases restored successfully!' : 'Could not restore purchases.'),
+          backgroundColor: success ? const Color(0xFF00E676) : Colors.redAccent,
+        ),
+      );
+    }
   }
 
   void _exportSave(BuildContext context, GameProvider gp) {
@@ -274,10 +410,11 @@ class SettingsScreen extends StatelessWidget {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Privacy Policy', style: TextStyle(color: Colors.white, fontSize: 18)),
         content: Text(
-          'Idle Creator Empire does not collect, store, or transmit any personal data.\n\n'
-          'All game data is stored locally on your device using SharedPreferences.\n\n'
-          'No internet connection is required to play.\n\n'
-          'No analytics, tracking, or third-party services are used.',
+          'Idle Creator Empire stores game data locally on your device.\n\n'
+          'When enabled, cloud save syncs your data to your account.\n\n'
+          'Analytics data is collected to improve game balance and user experience. '
+          'No personally identifiable information is collected.\n\n'
+          'Ads are served through Google AdMob and are subject to Google\'s privacy policy.',
           style: TextStyle(color: Colors.white.withAlpha(180), fontSize: 13),
         ),
         actions: [
@@ -335,29 +472,33 @@ class _ToggleTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A24),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: Colors.white.withAlpha(180), size: 20),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(color: Colors.white, fontSize: 14),
+    return Semantics(
+      toggled: value,
+      label: '$label toggle',
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1A24),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: Colors.white.withAlpha(180), size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+              ),
             ),
-          ),
-          Switch(
-            value: value,
-            onChanged: onChanged,
-            activeColor: const Color(0xFF7C4DFF),
-          ),
-        ],
+            Switch(
+              value: value,
+              onChanged: onChanged,
+              activeColor: const Color(0xFF7C4DFF),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -382,24 +523,28 @@ class _ActionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = danger ? Colors.redAccent : Colors.white;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A24),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: ListTile(
-        leading: Icon(icon, color: danger ? Colors.redAccent : Colors.white.withAlpha(180), size: 22),
-        title: Text(label, style: TextStyle(color: color, fontSize: 14)),
-        subtitle: Text(
-          subtitle,
-          style: TextStyle(color: color.withAlpha(100), fontSize: 11),
+    return Semantics(
+      button: onTap != null,
+      label: label,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1A24),
+          borderRadius: BorderRadius.circular(12),
         ),
-        trailing: onTap != null
-            ? Icon(Icons.chevron_right, color: Colors.white.withAlpha(60), size: 20)
-            : null,
-        onTap: onTap,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: ListTile(
+          leading: Icon(icon, color: danger ? Colors.redAccent : Colors.white.withAlpha(180), size: 22),
+          title: Text(label, style: TextStyle(color: color, fontSize: 14)),
+          subtitle: Text(
+            subtitle,
+            style: TextStyle(color: color.withAlpha(100), fontSize: 11),
+          ),
+          trailing: onTap != null
+              ? Icon(Icons.chevron_right, color: Colors.white.withAlpha(60), size: 20)
+              : null,
+          onTap: onTap,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
       ),
     );
   }

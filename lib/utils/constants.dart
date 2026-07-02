@@ -31,7 +31,12 @@ class GameConstants {
   static const String keyTotalWheelSpins = 'totalSpins';
   static const String keyLastWheelSpin = 'lastSpin';
 
+  static const String keyRemoveAds = 'removeAds';
+  static const String keyIsVip = 'isVip';
+  static const String keyTotalIapPurchases = 'totalIap';
+  static const String keyCloudSyncTimestamp = 'cloudSyncTs';
+
   static const int maxOfflineHours = 8;
   static const int autoIncomeIntervalMs = 1000;
-  static const String appVersion = '1.1.0';
+  static const String appVersion = '1.2.0';
 }
