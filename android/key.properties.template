@@ -1,0 +1,17 @@
+# Signing configuration for release builds
+# Copy this file to key.properties and fill in your values
+# NEVER commit key.properties to version control
+
+storePassword=YOUR_KEYSTORE_PASSWORD
+keyPassword=YOUR_KEY_PASSWORD
+keyAlias=YOUR_KEY_ALIAS
+storeFile=YOUR_KEYSTORE_FILE_PATH
+
+# Example:
+# storePassword=mySecurePassword123
+# keyPassword=myKeyPassword123
+# keyAlias=idle-creator-empire
+# storeFile=/Users/yourname/keystore/idle-creator-empire.jks
+
+# To generate a keystore:
+# keytool -genkey -v -keystore idle-creator-empire.jks -keyalg RSA -keysize 2048 -validity 10000 -alias idle-creator-empire
