@@ -1,11 +1,18 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import '../models/achievement.dart';
+import '../models/boost.dart';
 import '../models/career.dart';
+import '../models/daily_reward.dart';
 import '../models/mission.dart';
 import '../models/player.dart';
+import '../models/prestige.dart';
 import '../models/upgrade.dart';
+import '../models/wheel_reward.dart';
+import '../services/ad_service.dart';
 import '../services/audio_service.dart';
+import '../services/notification_service.dart';
 import '../services/save_service.dart';
 import '../utils/constants.dart';
 
@@ -28,6 +35,8 @@ class OfflineEarnings {
 class GameProvider extends ChangeNotifier {
   final SaveService _saveService;
   final AudioService audioService = AudioService();
+  final AdService adService = AdService();
+  final NotificationService notificationService = NotificationService();
   Player? _player;
   bool _isLoaded = false;
   OfflineEarnings? _offlineEarnings;
@@ -37,6 +46,8 @@ class GameProvider extends ChangeNotifier {
   int? _pendingLevelUp;
   final List<Achievement> _pendingAchievements = [];
   List<Mission> _todayMissions = [];
+  bool _prestigePending = false;
+  bool _hapticEnabled = true;
 
   GameProvider(this._saveService);
 
@@ -45,6 +56,19 @@ class GameProvider extends ChangeNotifier {
   bool get hasPlayer => _player != null;
   OfflineEarnings? get offlineEarnings => _offlineEarnings;
   List<Mission> get todayMissions => _todayMissions;
+  bool get prestigePending => _prestigePending;
+  bool get hapticEnabled => _hapticEnabled;
+  SaveService get saveService => _saveService;
+
+  set prestigePending(bool v) {
+    _prestigePending = v;
+    notifyListeners();
+  }
+
+  void toggleHaptic() {
+    _hapticEnabled = !_hapticEnabled;
+    notifyListeners();
+  }
 
   int? consumeLevelUp() {
     final lv = _pendingLevelUp;
@@ -68,6 +92,8 @@ class GameProvider extends ChangeNotifier {
       _startAutoIncome();
       _startOnlineTimer();
     }
+    adService.initialize();
+    notificationService.initialize();
     _isLoaded = true;
     notifyListeners();
   }
@@ -151,10 +177,13 @@ class GameProvider extends ChangeNotifier {
       _setMissionProgress(MissionType.reachLevel, p.level.toDouble());
     }
 
+    _trackHighestCps();
     _checkAchievements();
     _batchSave(5);
     notifyListeners();
   }
+
+  // ═══════════════ Upgrades ═══════════════
 
   bool canBuyUpgrade(UpgradeDef upgrade) {
     if (_player == null) return false;
@@ -186,11 +215,14 @@ class GameProvider extends ChangeNotifier {
     p.totalUpgradesBought++;
 
     _updateMissionProgress(MissionType.buyUpgrades, 1);
+    _trackHighestCps();
     _checkAchievements();
     audioService.playBuy();
     _saveService.savePlayer(p);
     notifyListeners();
   }
+
+  // ═══════════════ Missions ═══════════════
 
   void claimMission(int index) {
     if (_player == null) return;
@@ -206,16 +238,7 @@ class GameProvider extends ChangeNotifier {
     p.xp += mission.xpReward;
     p.completedMissions.add(index);
 
-    final prevLevel = p.level;
-    while (p.xp >= p.xpToNextLevel) {
-      p.xp -= p.xpToNextLevel;
-      p.level++;
-    }
-    if (p.level > prevLevel) {
-      _pendingLevelUp = p.level;
-      audioService.playLevelUp();
-    }
-
+    _levelUpCheck(p);
     audioService.playReward();
     _checkAchievements();
     _saveService.savePlayer(p);
@@ -237,6 +260,261 @@ class GameProvider extends ChangeNotifier {
     final target = _todayMissions[index].target;
     if (target <= 0) return 1;
     return (_player!.missionProgress[index] / target).clamp(0.0, 1.0);
+  }
+
+  // ═══════════════ Prestige ═══════════════
+
+  void prestige() {
+    if (_player == null) return;
+    final p = _player!;
+    final points = p.potentialPrestigePoints;
+    if (points <= 0) return;
+
+    p.lifetimeCoinsEarned += p.totalCoinsEarned;
+    p.lifetimeViewsEarned += p.totalViewsEarned;
+    p.totalOnlineSeconds += p.onlineSeconds;
+    _trackHighestCps();
+
+    p.prestigeCount++;
+    p.prestigePoints += points;
+    p.totalPrestigePoints += points;
+
+    final headStartLevel = p.getPrestigeUpgradeLevel('head_start');
+    final startCoins = headStartAmounts[headStartLevel.clamp(0, headStartAmounts.length - 1)];
+
+    p.coins = startCoins;
+    p.views = 0;
+    p.followers = 0;
+    p.xp = 0;
+    p.level = 1;
+    p.upgradeLevels.clear();
+    p.totalTaps = 0;
+    p.totalCoinsEarned = 0;
+    p.totalViewsEarned = 0;
+    p.totalUpgradesBought = 0;
+    p.missionDay = '';
+    p.missionProgress = List.filled(5, 0);
+    p.completedMissions = {};
+    p.onlineSeconds = 0;
+
+    _ensureMissions();
+    audioService.playPrestige();
+    _saveService.savePlayer(p);
+    _prestigePending = true;
+    notifyListeners();
+  }
+
+  bool canBuyPrestigeUpgrade(PrestigeUpgrade upgrade) {
+    if (_player == null) return false;
+    final lv = _player!.getPrestigeUpgradeLevel(upgrade.id);
+    if (lv >= upgrade.maxLevel) return false;
+    return _player!.prestigePoints >= upgrade.costForLevel(lv);
+  }
+
+  void buyPrestigeUpgrade(PrestigeUpgrade upgrade) {
+    if (_player == null) return;
+    final p = _player!;
+    final lv = p.getPrestigeUpgradeLevel(upgrade.id);
+    if (lv >= upgrade.maxLevel) return;
+    final cost = upgrade.costForLevel(lv);
+    if (p.prestigePoints < cost) return;
+
+    p.prestigePoints -= cost;
+    p.prestigeUpgrades[upgrade.id] = lv + 1;
+
+    audioService.playBuy();
+    _saveService.savePlayer(p);
+    notifyListeners();
+  }
+
+  // ═══════════════ Daily Login ═══════════════
+
+  bool get hasDailyRewardAvailable {
+    if (_player == null) return false;
+    return _player!.lastClaimDate != _todayString();
+  }
+
+  int get currentDailyStreak {
+    if (_player == null) return 0;
+    return _player!.dailyLoginStreak;
+  }
+
+  void claimDailyReward() {
+    if (_player == null) return;
+    final p = _player!;
+    final today = _todayString();
+    if (p.lastClaimDate == today) return;
+
+    final yesterday = _yesterdayString();
+    if (p.lastClaimDate == yesterday) {
+      p.dailyLoginStreak++;
+      if (p.dailyLoginStreak > 30) p.dailyLoginStreak = 1;
+    } else {
+      p.dailyLoginStreak = 1;
+    }
+
+    p.lastClaimDate = today;
+
+    final reward = allDailyRewards[p.dailyLoginStreak - 1];
+    p.coins += reward.coins;
+    p.totalCoinsEarned += reward.coins;
+    p.xp += reward.xp;
+    if (reward.prestigePoints > 0) {
+      p.prestigePoints += reward.prestigePoints;
+      p.totalPrestigePoints += reward.prestigePoints;
+    }
+
+    _levelUpCheck(p);
+    audioService.playReward();
+    _checkAchievements();
+    _saveService.savePlayer(p);
+    notifyListeners();
+  }
+
+  // ═══════════════ Boosts ═══════════════
+
+  void activateBoost(String boostId, int durationSeconds) {
+    if (_player == null) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final currentEnd = _player!.boostEndTimes[boostId] ?? 0;
+    final newEnd = (currentEnd > now ? currentEnd : now) + (durationSeconds * 1000);
+    _player!.boostEndTimes[boostId] = newEnd;
+    audioService.playBoost();
+    _saveService.savePlayer(_player!);
+    notifyListeners();
+  }
+
+  bool isBoostActive(String boostId) {
+    if (_player == null) return false;
+    return (_player!.boostEndTimes[boostId] ?? 0) > DateTime.now().millisecondsSinceEpoch;
+  }
+
+  // ═══════════════ Lucky Wheel ═══════════════
+
+  int determineWheelResult() {
+    final segments = allWheelSegments;
+    final totalWeight = segments.fold(0.0, (sum, s) => sum + s.weight);
+    double r = Random().nextDouble() * totalWeight;
+    for (int i = 0; i < segments.length; i++) {
+      r -= segments[i].weight;
+      if (r <= 0) return i;
+    }
+    return 0;
+  }
+
+  void claimWheelReward(int segmentIndex) {
+    if (_player == null) return;
+    if (segmentIndex < 0 || segmentIndex >= allWheelSegments.length) return;
+
+    final segment = allWheelSegments[segmentIndex];
+    final p = _player!;
+
+    switch (segment.type) {
+      case WheelRewardType.coins:
+      case WheelRewardType.jackpot:
+        final reward = segment.value * p.prestigeMultiplier;
+        p.coins += reward;
+        p.totalCoinsEarned += reward;
+      case WheelRewardType.xp:
+        p.xp += segment.value * p.xpGainMultiplier;
+        _levelUpCheck(p);
+      case WheelRewardType.boost:
+        if (segment.boostId != null) {
+          activateBoost(segment.boostId!, segment.value.toInt());
+        }
+      case WheelRewardType.prestigePoint:
+        p.prestigePoints += segment.value.toInt();
+        p.totalPrestigePoints += segment.value.toInt();
+    }
+
+    p.totalWheelSpins++;
+    p.lastWheelSpin = DateTime.now().millisecondsSinceEpoch;
+
+    audioService.playWheelResult();
+    _checkAchievements();
+    _saveService.savePlayer(p);
+    notifyListeners();
+  }
+
+  void grantFreeWheelSpin() {
+    if (_player == null) return;
+    _player!.lastWheelSpin = 0;
+    notifyListeners();
+  }
+
+  // ═══════════════ Ads ═══════════════
+
+  void watchAdForBoost() {
+    adService.showRewardedAd(
+      rewardType: 'boost_2x',
+      onRewarded: () => activateBoost('boost_2x', 900),
+    );
+  }
+
+  void watchAdForCoins() {
+    if (_player == null) return;
+    adService.showRewardedAd(
+      rewardType: 'coins',
+      onRewarded: () {
+        final bonus = _player!.coinsPerSecond * 300;
+        final reward = bonus > 100 ? bonus : 100;
+        _player!.coins += reward;
+        _player!.totalCoinsEarned += reward;
+        _saveService.savePlayer(_player!);
+        notifyListeners();
+      },
+    );
+  }
+
+  void watchAdForWheelSpin() {
+    adService.showRewardedAd(
+      rewardType: 'wheel_spin',
+      onRewarded: () => grantFreeWheelSpin(),
+    );
+  }
+
+  // ═══════════════ Settings ═══════════════
+
+  Future<void> resetGame() async {
+    _autoIncomeTimer?.cancel();
+    _onlineTimer?.cancel();
+    _player = null;
+    _todayMissions = [];
+    _pendingAchievements.clear();
+    _pendingLevelUp = null;
+    _offlineEarnings = null;
+    await _saveService.clearAll();
+    notifyListeners();
+  }
+
+  String exportSave() => _saveService.exportSave();
+
+  Future<bool> importSave(String data) async {
+    final success = await _saveService.importSave(data);
+    if (success) {
+      _player = _saveService.loadPlayer();
+      if (_player != null) {
+        _ensureMissions();
+        _startAutoIncome();
+        _startOnlineTimer();
+      }
+      notifyListeners();
+    }
+    return success;
+  }
+
+  // ═══════════════ Internal ═══════════════
+
+  void _levelUpCheck(Player p) {
+    final prevLevel = p.level;
+    while (p.xp >= p.xpToNextLevel) {
+      p.xp -= p.xpToNextLevel;
+      p.level++;
+    }
+    if (p.level > prevLevel) {
+      _pendingLevelUp = p.level;
+      audioService.playLevelUp();
+    }
   }
 
   void _ensureMissions() {
@@ -344,18 +622,36 @@ class GameProvider extends ChangeNotifier {
   }
 
   void _tickAutoIncome() {
-    if (_player == null || !_player!.hasAutoIncome) return;
+    if (_player == null) return;
     final p = _player!;
 
-    final coinGain = p.coinsPerSecond;
-    final viewGain = p.viewsPerSecond;
-    p.coins += coinGain;
-    p.views += viewGain;
-    p.followers += p.followersPerSecond;
-    p.totalCoinsEarned += coinGain;
-    p.totalViewsEarned += viewGain;
+    if (p.hasAutoIncome) {
+      final coinGain = p.coinsPerSecond;
+      final viewGain = p.viewsPerSecond;
+      p.coins += coinGain;
+      p.views += viewGain;
+      p.followers += p.followersPerSecond;
+      p.totalCoinsEarned += coinGain;
+      p.totalViewsEarned += viewGain;
+      _updateMissionProgress(MissionType.earnCoins, coinGain);
+    }
 
-    _updateMissionProgress(MissionType.earnCoins, coinGain);
+    if (p.hasAutoTap) {
+      final coinGain = p.coinsPerTap;
+      final viewGain = p.viewsPerTap;
+      p.coins += coinGain;
+      p.views += viewGain;
+      p.followers += p.followersPerTap;
+      p.xp += p.xpPerTap;
+      p.totalTaps++;
+      p.totalCoinsEarned += coinGain;
+      p.totalViewsEarned += viewGain;
+      _updateMissionProgress(MissionType.tapCount, 1);
+      _updateMissionProgress(MissionType.earnCoins, coinGain);
+      _levelUpCheck(p);
+    }
+
+    _trackHighestCps();
     _batchSave(10);
     notifyListeners();
   }
@@ -363,11 +659,20 @@ class GameProvider extends ChangeNotifier {
   void _tickOnline() {
     if (_player == null) return;
     _player!.onlineSeconds += 60;
+    _player!.totalOnlineSeconds += 60;
     _setMissionProgress(
       MissionType.onlineMinutes,
       (_player!.onlineSeconds / 60).floorToDouble(),
     );
     notifyListeners();
+  }
+
+  void _trackHighestCps() {
+    if (_player == null) return;
+    final cps = _player!.coinsPerSecond;
+    if (cps > _player!.highestCoinPerSecond) {
+      _player!.highestCoinPerSecond = cps;
+    }
   }
 
   void _batchSave(int interval) {
@@ -383,12 +688,19 @@ class GameProvider extends ChangeNotifier {
     return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
   }
 
+  String _yesterdayString() {
+    final yesterday = DateTime.now().subtract(const Duration(days: 1));
+    return '${yesterday.year}-${yesterday.month.toString().padLeft(2, '0')}-${yesterday.day.toString().padLeft(2, '0')}';
+  }
+
   @override
   void dispose() {
     _autoIncomeTimer?.cancel();
     _onlineTimer?.cancel();
     if (_player != null) _saveService.savePlayer(_player!);
     audioService.dispose();
+    adService.dispose();
+    notificationService.dispose();
     super.dispose();
   }
 }

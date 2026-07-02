@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/boost.dart';
 import '../models/career.dart';
-import '../models/mission.dart';
 import '../models/player.dart';
+import '../models/prestige.dart';
 import '../models/upgrade.dart';
 import '../utils/constants.dart';
 
@@ -43,13 +45,34 @@ class SaveService {
       _prefs.setStringList(GameConstants.keyAchievements, player.completedAchievements.toList()),
       _prefs.setString(GameConstants.keyMissionDay, player.missionDay),
       _prefs.setInt(GameConstants.keyOnlineSeconds, player.onlineSeconds),
+      _prefs.setInt(GameConstants.keyPrestigeCount, player.prestigeCount),
+      _prefs.setInt(GameConstants.keyPrestigePoints, player.prestigePoints),
+      _prefs.setInt(GameConstants.keyTotalPrestigePoints, player.totalPrestigePoints),
+      _prefs.setInt(GameConstants.keyDailyLoginStreak, player.dailyLoginStreak),
+      _prefs.setString(GameConstants.keyLastClaimDate, player.lastClaimDate),
+      _prefs.setDouble(GameConstants.keyLifetimeCoins, player.lifetimeCoinsEarned),
+      _prefs.setDouble(GameConstants.keyLifetimeViews, player.lifetimeViewsEarned),
+      _prefs.setInt(GameConstants.keyTotalOnlineSeconds, player.totalOnlineSeconds),
+      _prefs.setDouble(GameConstants.keyHighestCps, player.highestCoinPerSecond),
+      _prefs.setInt(GameConstants.keyTotalWheelSpins, player.totalWheelSpins),
+      _prefs.setInt(GameConstants.keyLastWheelSpin, player.lastWheelSpin),
     ];
 
     for (final u in allUpgrades) {
       final lv = player.getUpgradeLevel(u.id);
-      if (lv > 0) {
-        futures.add(_prefs.setInt('${GameConstants.keyUpgradePrefix}${u.id}', lv));
-      }
+      futures.add(_prefs.setInt('${GameConstants.keyUpgradePrefix}${u.id}', lv));
+    }
+
+    for (final pu in allPrestigeUpgrades) {
+      final lv = player.getPrestigeUpgradeLevel(pu.id);
+      futures.add(_prefs.setInt('${GameConstants.keyPrestigeUpgradePrefix}${pu.id}', lv));
+    }
+
+    for (final b in allBoosts) {
+      futures.add(_prefs.setInt(
+        '${GameConstants.keyBoostEndPrefix}${b.id}',
+        player.boostEndTimes[b.id] ?? 0,
+      ));
     }
 
     for (int i = 0; i < 5; i++) {
@@ -74,6 +97,18 @@ class SaveService {
     for (final u in allUpgrades) {
       final lv = _prefs.getInt('${GameConstants.keyUpgradePrefix}${u.id}') ?? 0;
       if (lv > 0) upgradeLevels[u.id] = lv;
+    }
+
+    final prestigeUpgradesMap = <String, int>{};
+    for (final pu in allPrestigeUpgrades) {
+      final lv = _prefs.getInt('${GameConstants.keyPrestigeUpgradePrefix}${pu.id}') ?? 0;
+      if (lv > 0) prestigeUpgradesMap[pu.id] = lv;
+    }
+
+    final boostEndTimes = <String, int>{};
+    for (final b in allBoosts) {
+      final end = _prefs.getInt('${GameConstants.keyBoostEndPrefix}${b.id}') ?? 0;
+      if (end > 0) boostEndTimes[b.id] = end;
     }
 
     final achievements = _prefs.getStringList(GameConstants.keyAchievements);
@@ -106,10 +141,64 @@ class SaveService {
       missionProgress: missionProgress,
       completedMissions: completedMissions,
       onlineSeconds: _prefs.getInt(GameConstants.keyOnlineSeconds) ?? 0,
+      prestigeCount: _prefs.getInt(GameConstants.keyPrestigeCount) ?? 0,
+      prestigePoints: _prefs.getInt(GameConstants.keyPrestigePoints) ?? 0,
+      totalPrestigePoints: _prefs.getInt(GameConstants.keyTotalPrestigePoints) ?? 0,
+      prestigeUpgrades: prestigeUpgradesMap,
+      dailyLoginStreak: _prefs.getInt(GameConstants.keyDailyLoginStreak) ?? 0,
+      lastClaimDate: _prefs.getString(GameConstants.keyLastClaimDate) ?? '',
+      boostEndTimes: boostEndTimes,
+      lifetimeCoinsEarned: _prefs.getDouble(GameConstants.keyLifetimeCoins) ?? 0,
+      lifetimeViewsEarned: _prefs.getDouble(GameConstants.keyLifetimeViews) ?? 0,
+      totalOnlineSeconds: _prefs.getInt(GameConstants.keyTotalOnlineSeconds) ?? 0,
+      highestCoinPerSecond: _prefs.getDouble(GameConstants.keyHighestCps) ?? 0,
+      totalWheelSpins: _prefs.getInt(GameConstants.keyTotalWheelSpins) ?? 0,
+      lastWheelSpin: _prefs.getInt(GameConstants.keyLastWheelSpin) ?? 0,
     );
   }
 
   int? loadLastSaveTimestamp() {
     return _prefs.getInt(GameConstants.keyLastSave);
+  }
+
+  Future<void> clearAll() async {
+    await _prefs.clear();
+  }
+
+  String exportSave() {
+    if (!hasCareer) return '';
+    final map = <String, dynamic>{};
+    for (final key in _prefs.getKeys()) {
+      map[key] = _prefs.get(key);
+    }
+    return base64Encode(utf8.encode(jsonEncode(map)));
+  }
+
+  Future<bool> importSave(String data) async {
+    try {
+      final jsonStr = utf8.decode(base64Decode(data));
+      final map = jsonDecode(jsonStr) as Map<String, dynamic>;
+      await _prefs.clear();
+      for (final entry in map.entries) {
+        final value = entry.value;
+        if (value is bool) {
+          await _prefs.setBool(entry.key, value);
+        } else if (value is int) {
+          await _prefs.setInt(entry.key, value);
+        } else if (value is double) {
+          await _prefs.setDouble(entry.key, value);
+        } else if (value is String) {
+          await _prefs.setString(entry.key, value);
+        } else if (value is List) {
+          await _prefs.setStringList(
+            entry.key,
+            value.map((e) => e.toString()).toList(),
+          );
+        }
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 }

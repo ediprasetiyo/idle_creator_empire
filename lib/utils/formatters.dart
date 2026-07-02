@@ -18,3 +18,29 @@ String formatDuration(Duration duration) {
   if (minutes > 0) return '${minutes}m';
   return '${duration.inSeconds}s';
 }
+
+String formatCountdown(int milliseconds) {
+  if (milliseconds <= 0) return '0:00';
+  final totalSeconds = (milliseconds / 1000).ceil();
+  final hours = totalSeconds ~/ 3600;
+  final minutes = (totalSeconds % 3600) ~/ 60;
+  final seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return '$hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+  return '$minutes:${seconds.toString().padLeft(2, '0')}';
+}
+
+String formatTimeShort(int seconds) {
+  if (seconds >= 3600) {
+    final h = seconds ~/ 3600;
+    final m = (seconds % 3600) ~/ 60;
+    return m > 0 ? '${h}h ${m}m' : '${h}h';
+  }
+  if (seconds >= 60) {
+    final m = seconds ~/ 60;
+    final s = seconds % 60;
+    return s > 0 ? '${m}m ${s}s' : '${m}m';
+  }
+  return '${seconds}s';
+}

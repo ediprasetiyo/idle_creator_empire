@@ -3,13 +3,16 @@ import 'package:provider/provider.dart';
 import '../models/achievement.dart';
 import '../providers/game_provider.dart';
 import '../widgets/achievement_popup.dart';
+import '../widgets/boost_bar.dart';
 import '../widgets/level_progress.dart';
 import '../widgets/level_up_overlay.dart';
+import '../widgets/particle_overlay.dart';
 import '../widgets/stats_bar.dart';
 import '../widgets/tap_button.dart';
 import '../utils/formatters.dart';
 import 'achievement_screen.dart';
 import 'mission_screen.dart';
+import 'more_screen.dart';
 import 'upgrade_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -23,12 +26,14 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
   int? _levelUpValue;
   Achievement? _pendingAchievement;
+  bool _dailyRewardChecked = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _showOfflineEarnings();
+      _checkDailyReward();
     });
   }
 
@@ -118,6 +123,50 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _checkDailyReward() {
+    if (_dailyRewardChecked) return;
+    _dailyRewardChecked = true;
+    final gp = context.read<GameProvider>();
+    if (gp.hasDailyRewardAvailable) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF1A1A24),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Column(
+            children: [
+              Icon(Icons.card_giftcard, color: Color(0xFFFF9100), size: 40),
+              SizedBox(height: 8),
+              Text('Daily Reward Available!', style: TextStyle(color: Colors.white, fontSize: 18)),
+            ],
+          ),
+          content: Text(
+            'Your daily login reward is ready to claim!',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white.withAlpha(150), fontSize: 13),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text('Later', style: TextStyle(color: Colors.white.withAlpha(120))),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                setState(() => _currentIndex = 4);
+              },
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFFF9100),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Go Claim!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
   void _checkPendingEvents(GameProvider gameProvider) {
     if (_levelUpValue != null || _pendingAchievement != null) return;
 
@@ -141,6 +190,7 @@ class _HomeScreenState extends State<HomeScreen> {
         if (player == null) return const SizedBox.shrink();
 
         final career = player.career;
+        final hasDailyBadge = gameProvider.hasDailyRewardAvailable;
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _checkPendingEvents(gameProvider);
@@ -151,6 +201,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const UpgradeScreen(),
           const MissionScreen(),
           const AchievementScreen(),
+          const MoreScreen(),
         ];
 
         return Scaffold(
@@ -161,6 +212,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 index: _currentIndex,
                 children: screens,
               ),
+              if (_currentIndex == 0)
+                Positioned.fill(
+                  child: ParticleOverlay(color: career.color),
+                ),
               if (_levelUpValue != null)
                 Positioned.fill(
                   child: LevelUpOverlay(
@@ -217,6 +272,20 @@ class _HomeScreenState extends State<HomeScreen> {
                 selectedIcon: Icon(Icons.emoji_events, color: career.color),
                 label: 'Achieve',
               ),
+              NavigationDestination(
+                icon: Badge(
+                  isLabelVisible: hasDailyBadge,
+                  smallSize: 8,
+                  child: Icon(Icons.grid_view_outlined,
+                      color: Colors.white.withAlpha(120)),
+                ),
+                selectedIcon: Badge(
+                  isLabelVisible: hasDailyBadge,
+                  smallSize: 8,
+                  child: Icon(Icons.grid_view, color: career.color),
+                ),
+                label: 'More',
+              ),
             ],
           ),
         );
@@ -236,7 +305,7 @@ class _HomeBody extends StatelessWidget {
     final career = player.career;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0E0E12),
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         backgroundColor: const Color(0xFF0E0E12),
         centerTitle: true,
@@ -257,14 +326,14 @@ class _HomeBody extends StatelessWidget {
         ),
         leading: IconButton(
           icon: Icon(
-            gameProvider.audioService.isMuted
+            gameProvider.audioService.isSoundMuted
                 ? Icons.volume_off
                 : Icons.volume_up,
             color: Colors.white.withAlpha(150),
             size: 22,
           ),
           onPressed: () {
-            gameProvider.audioService.toggleMute();
+            gameProvider.audioService.toggleSound();
             (context as Element).markNeedsBuild();
           },
         ),
@@ -307,6 +376,7 @@ class _HomeBody extends StatelessWidget {
         children: [
           StatsBar(player: player),
           LevelProgress(player: player, accentColor: career.color),
+          BoostBar(player: player),
           if (player.hasAutoIncome)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -326,6 +396,21 @@ class _HomeBody extends StatelessWidget {
                       color: Color(0xFF00E676),
                       fontSize: 11,
                     ),
+                  ),
+                ],
+              ),
+            ),
+          if (player.prestigeCount > 0)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.diamond, color: Color(0xFFE040FB), size: 12),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${player.prestigeMultiplier.toStringAsFixed(1)}x prestige bonus',
+                    style: const TextStyle(color: Color(0xFFE040FB), fontSize: 11),
                   ),
                 ],
               ),
