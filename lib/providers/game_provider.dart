@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../config/iap_config.dart';
 import '../models/achievement.dart';
 import '../models/boost.dart';
@@ -24,6 +25,7 @@ import '../services/notification_service.dart';
 import '../services/performance_service.dart';
 import '../services/remote_config_service.dart';
 import '../services/save_service.dart';
+import '../services/tutorial_service.dart';
 import '../utils/constants.dart';
 
 class OfflineEarnings {
@@ -55,8 +57,10 @@ class GameProvider extends ChangeNotifier {
   final LeaderboardService leaderboardService = LeaderboardService();
   final AchievementSyncService achievementSyncService = AchievementSyncService();
   final IapService iapService = IapService();
+  final TutorialService tutorialService = TutorialService();
 
   Player? _player;
+  SharedPreferences? _prefs;
   bool _isLoaded = false;
   OfflineEarnings? _offlineEarnings;
   Timer? _autoIncomeTimer;
@@ -107,6 +111,8 @@ class GameProvider extends ChangeNotifier {
     final trace = performanceService.startTrace('app_load');
 
     await _saveService.init();
+    _prefs = await SharedPreferences.getInstance();
+    await tutorialService.load(_prefs!);
     _player = _saveService.loadPlayer();
     if (_player != null) {
       _calculateOfflineEarnings();
@@ -603,6 +609,18 @@ class GameProvider extends ChangeNotifier {
     return success;
   }
 
+  Future<void> advanceTutorial() async {
+    if (_prefs == null) return;
+    await tutorialService.advanceStep(_prefs!);
+    notifyListeners();
+  }
+
+  Future<void> skipTutorial() async {
+    if (_prefs == null) return;
+    await tutorialService.skip(_prefs!);
+    notifyListeners();
+  }
+
   Future<void> resetGame() async {
     _autoIncomeTimer?.cancel();
     _onlineTimer?.cancel();
@@ -611,6 +629,7 @@ class GameProvider extends ChangeNotifier {
     _pendingAchievements.clear();
     _pendingLevelUp = null;
     _offlineEarnings = null;
+    if (_prefs != null) await tutorialService.reset(_prefs!);
     analyticsService.logGameReset();
     await _saveService.clearAll();
     notifyListeners();

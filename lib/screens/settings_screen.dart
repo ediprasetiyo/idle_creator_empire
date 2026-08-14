@@ -4,6 +4,9 @@ import 'package:provider/provider.dart';
 import '../providers/game_provider.dart';
 import '../services/cloud_save_service.dart';
 import '../utils/constants.dart';
+import 'privacy_screen.dart';
+import 'terms_screen.dart';
+import 'data_deletion_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -118,7 +121,48 @@ class SettingsScreen extends StatelessWidget {
                 icon: Icons.privacy_tip_outlined,
                 label: 'Privacy Policy',
                 subtitle: 'View privacy information',
-                onTap: () => _showPrivacy(context),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const PrivacyScreen()),
+                ),
+              ),
+              _ActionTile(
+                icon: Icons.description_outlined,
+                label: 'Terms of Service',
+                subtitle: 'View terms and conditions',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const TermsScreen()),
+                ),
+              ),
+              _ActionTile(
+                icon: Icons.delete_outline,
+                label: 'Data Deletion',
+                subtitle: 'Manage and delete your data',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const DataDeletionScreen()),
+                ),
+              ),
+              _ActionTile(
+                icon: Icons.source_outlined,
+                label: 'Open Source Licenses',
+                subtitle: 'Third-party software licenses',
+                onTap: () => showLicensePage(
+                  context: context,
+                  applicationName: 'Idle Creator Empire',
+                  applicationVersion: GameConstants.appVersion,
+                  applicationIcon: Container(
+                    width: 60,
+                    height: 60,
+                    margin: const EdgeInsets.only(top: 8),
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [Color(0xFF7C4DFF), Color(0xFFE040FB)],
+                      ),
+                    ),
+                    child: const Icon(Icons.play_circle_fill,
+                        size: 30, color: Colors.white),
+                  ),
+                ),
               ),
             ],
           ),
@@ -402,37 +446,6 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  void _showPrivacy(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A24),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Privacy Policy', style: TextStyle(color: Colors.white, fontSize: 18)),
-        content: Text(
-          'Idle Creator Empire stores game data locally on your device.\n\n'
-          'When enabled, cloud save syncs your data to your account.\n\n'
-          'Analytics data is collected to improve game balance and user experience. '
-          'No personally identifiable information is collected.\n\n'
-          'Ads are served through Google AdMob and are subject to Google\'s privacy policy.',
-          style: TextStyle(color: Colors.white.withAlpha(180), fontSize: 13),
-        ),
-        actions: [
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF7C4DFF),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              child: const Text('Close', style: TextStyle(color: Colors.white)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _SectionLabel extends StatelessWidget {

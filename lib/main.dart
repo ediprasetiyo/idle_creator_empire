@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
+import 'l10n/app_localizations.dart';
 import 'providers/game_provider.dart';
 import 'services/save_service.dart';
 import 'screens/splash_screen.dart';
@@ -60,6 +62,13 @@ class IdleCreatorEmpireApp extends StatelessWidget {
           behavior: SnackBarBehavior.floating,
         ),
       ),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       builder: (context, child) {
         final mediaQuery = MediaQuery.of(context);
         final textScaler = mediaQuery.textScaler.clamp(

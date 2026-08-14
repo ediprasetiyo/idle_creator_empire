@@ -9,6 +9,7 @@ import '../widgets/level_up_overlay.dart';
 import '../widgets/particle_overlay.dart';
 import '../widgets/stats_bar.dart';
 import '../widgets/tap_button.dart';
+import '../widgets/tutorial_overlay.dart';
 import '../utils/formatters.dart';
 import 'achievement_screen.dart';
 import 'mission_screen.dart';
@@ -240,6 +241,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     onDismiss: () {
                       setState(() => _pendingAchievement = null);
                     },
+                  ),
+                ),
+              if (gameProvider.tutorialService.isActive)
+                Positioned.fill(
+                  child: TutorialOverlay(
+                    tutorialService: gameProvider.tutorialService,
+                    onNext: () => gameProvider.advanceTutorial(),
+                    onSkip: () => gameProvider.skipTutorial(),
                   ),
                 ),
             ],
